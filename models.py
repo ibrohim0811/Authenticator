@@ -39,6 +39,12 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     device_token: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    # SHA-256 hash of the current valid refresh token (never the raw token).
+    # Overwritten every time a new refresh/access pair is issued (register,
+    # login, refresh), which gives simple one-shot rotation: an old refresh
+    # token stops working the moment a newer one is issued.
+    refresh_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

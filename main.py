@@ -2,7 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from config import settings
-from routers import auth, notifications, service
+from routers import service
+from routers import auth
+from routers import notifications
 
 app = FastAPI(title="Authenticator by iDev")
 

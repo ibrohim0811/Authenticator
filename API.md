@@ -1,7 +1,7 @@
 # Authenticator API Documentation
 
-Phone-number authentication service with Telegram-bot-delivered OTP, JWT
-sessions, and a push-notification API for partner services.
+Phone-number authentication service with JWT access + refresh tokens, and a
+push-notification API for partner services.
 
 **Base URL**
 
@@ -21,10 +21,9 @@ Interactive Swagger UI is available at `/docs`, and the raw OpenAPI schema at
 1. [Authentication](#authentication)
 2. [Users](#users)
    - [Register](#1-register)
-   - [Resend OTP](#2-resend-otp)
-   - [Confirm OTP](#3-confirm-otp)
-   - [Login](#4-login)
-   - [Current user](#5-current-user)
+   - [Login](#2-login)
+   - [Refresh](#3-refresh)
+   - [Current user](#4-current-user)
 3. [Services](#services)
    - [Register a service](#1-register-a-service)
    - [Send a message](#2-send-a-message)
@@ -39,20 +38,35 @@ Interactive Swagger UI is available at `/docs`, and the raw OpenAPI schema at
 
 ## Authentication
 
-Two separate credentials are used in this API, for two different callers:
+Three separate credentials are used in this API:
 
 | Credential | Who uses it | Where |
 |---|---|---|
 | **JWT access token** | End users (mobile/web app) | `Authorization: Bearer <token>` header |
+| **JWT refresh token** | End users, only against `/refresh` | Request body |
 | **Service token** | Partner services sending notifications | In the request body, alongside `service_id` |
 
-A JWT is issued by [Confirm OTP](#3-confirm-otp) or [Login](#4-login) and is
-valid for `ACCESS_TOKEN_EXPIRE_DAYS` days (30 by default). Send it on every
-endpoint marked 🔒 below:
+[Register](#1-register) and [Login](#2-login) both return an
+**access token** and a **refresh token**:
 
-```
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
+- The **access token** is valid for `ACCESS_TOKEN_EXPIRE_DAYS` days (30 by
+  default) and is what you send on every 🔒 endpoint below:
+
+  ```
+  Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+  ```
+
+- The **refresh token** is valid for `REFRESH_TOKEN_EXPIRE_DAYS` days (60 by
+  default) and is used only to get a new access/refresh pair via
+  [Refresh](#3-refresh) once the access token is close to (or already)
+  expired — without asking the user to log in again.
+
+Refresh tokens **rotate**: every call to `/refresh` returns a brand-new
+refresh token and immediately invalidates the previous one (the server only
+keeps a hash of the single most-recently-issued refresh token per user). A
+stolen, already-used refresh token cannot be replayed. There is no OTP, SMS,
+or Telegram step anywhere in this flow — registration and login are
+immediate.
 
 ---
 
@@ -62,10 +76,8 @@ Base path: `/api/v1/users`
 
 ### 1. Register
 
-Starts registration for a new phone number. The account is **not** created
-yet — the submitted data and a 6-digit OTP code are held in Redis for a short
-time (`OTP_TTL_SECONDS`, 3 minutes by default) while the user retrieves the
-code from the Telegram bot.
+Creates the account immediately — full name, phone number and password are
+all that's required. No OTP is generated or sent anywhere.
 
 ```
 POST /api/v1/users/register
@@ -78,6 +90,7 @@ POST /api/v1/users/register
 | `full_name` | string | ✅ | |
 | `phone_number` | string | ✅ | Must not already belong to an existing account |
 | `password` | string | ✅ | Hashed with bcrypt before storage |
+| `device_token` | string | ❌ | Push-notification device token, stored on the user |
 
 ```json
 {
@@ -92,84 +105,8 @@ POST /api/v1/users/register
 ```json
 {
   "status": "success",
-  "message": "OTP yaratildi. Telegram bot orqali kodni oling.",
-  "bot_url": "https://t.me/SizningBotiningizName_bot?start=%2B998901234567"
-}
-```
-
-**Errors**
-
-| Status | Cause |
-|---|---|
-| `400` | Phone number already registered |
-
----
-
-### 2. Resend OTP
-
-Re-generates a code for a registration that's still pending (i.e. within the
-Redis TTL window). Does not restart registration — if the window already
-expired, call [Register](#1-register) again instead.
-
-```
-POST /api/v1/users/resend-otp
-```
-
-**Body**
-
-```json
-{ "phone_number": "+998901234567" }
-```
-
-**Response `200`**
-
-```json
-{
-  "status": "success",
-  "message": "Yangi OTP kod yuborildi.",
-  "bot_url": "https://t.me/SizningBotiningizName_bot?start=%2B998901234567"
-}
-```
-
-**Errors**
-
-| Status | Cause |
-|---|---|
-| `400` | No pending registration found for this number (expired or never started) |
-
----
-
-### 3. Confirm OTP
-
-Verifies the code, creates the user in Postgres, and returns a JWT — the
-user is logged in immediately after registering.
-
-```
-POST /api/v1/users/confirm-otp
-```
-
-**Body**
-
-| Field | Type | Required | Notes |
-|---|---|---|---|
-| `phone_number` | string | ✅ | |
-| `otp_code` | string | ✅ | 6 digits |
-| `device_token` | string | ❌ | Push-notification device token, stored on the user |
-
-```json
-{
-  "phone_number": "+998901234567",
-  "otp_code": "482913",
-  "device_token": "fcm:abcdef123456"
-}
-```
-
-**Response `200`**
-
-```json
-{
-  "status": "success",
   "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "token_type": "bearer",
   "user": {
     "id": "5b1f7e2a-9c3d-4e21-8a4f-2d6c1f9b7a10",
@@ -183,11 +120,11 @@ POST /api/v1/users/confirm-otp
 
 | Status | Cause |
 |---|---|
-| `400` | Code expired / no pending registration, or wrong code |
+| `400` | Phone number already registered |
 
 ---
 
-### 4. Login
+### 2. Login
 
 ```
 POST /api/v1/users/login
@@ -208,7 +145,9 @@ POST /api/v1/users/login
 }
 ```
 
-**Response `200`** — same shape as [Confirm OTP](#3-confirm-otp).
+**Response `200`** — same shape as [Register](#1-register). A new
+access/refresh pair is issued and replaces any previous refresh token for
+this user.
 
 **Errors**
 
@@ -218,10 +157,42 @@ POST /api/v1/users/login
 
 ---
 
-### 5. Current user 🔒
+### 3. Refresh
 
-Returns the account tied to the bearer token — useful for the client to
-verify a stored token is still valid.
+Exchanges a still-valid, not-yet-superseded refresh token for a brand-new
+access/refresh pair. Call this when the access token has expired (or is
+about to) instead of sending the user back through [Login](#2-login).
+
+```
+POST /api/v1/users/refresh
+```
+
+**Body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `refresh_token` | string | ✅ | The refresh token from Register/Login/a previous Refresh |
+
+```json
+{ "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..." }
+```
+
+**Response `200`** — same shape as [Register](#1-register): a new
+`access_token` **and** a new `refresh_token`. The old refresh token stops
+working immediately (rotation).
+
+**Errors**
+
+| Status | Cause |
+|---|---|
+| `401` | Refresh token missing/invalid/expired, not of type `refresh`, or already rotated/superseded |
+
+---
+
+### 4. Current user 🔒
+
+Returns the account tied to the bearer access token — useful for the client
+to verify a stored token is still valid.
 
 ```
 GET /api/v1/users/me
@@ -241,7 +212,7 @@ GET /api/v1/users/me
 
 | Status | Cause |
 |---|---|
-| `401` | Missing, invalid, or expired token |
+| `401` | Missing, invalid, or expired access token (a refresh token here is also rejected) |
 
 ---
 
@@ -346,7 +317,7 @@ POST /api/v1/messages/send
 ## Notifications
 
 Base path: `/api/v1/notifications` — all endpoints require a user's bearer
-token and only ever return that user's own notifications.
+access token and only ever return that user's own notifications.
 
 ### 1. List notifications 🔒
 
@@ -417,7 +388,7 @@ Every error follows FastAPI's default shape:
 | Code | Meaning |
 |---|---|
 | `200` | Success |
-| `400` | Bad request — validation failed at the business-logic level (duplicate, expired, wrong code) |
-| `401` | Missing/invalid credentials (JWT or service token) |
+| `400` | Bad request — validation failed at the business-logic level (e.g. duplicate phone number) |
+| `401` | Missing/invalid credentials (access token, refresh token, or service token) |
 | `404` | Resource not found |
 | `422` | Request body failed schema validation (missing/malformed field) |

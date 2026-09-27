@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from models import User
-from security import decode_access_token
+from security import decode_token
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/users/login")
 
@@ -23,7 +23,10 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = decode_access_token(token)
+        payload = decode_token(token)
+        if payload.get("type") != "access":
+            # A refresh token (or anything else) can't be used as a Bearer token.
+            raise credentials_exception
         user_id: str | None = payload.get("sub")
         if user_id is None:
             raise credentials_exception

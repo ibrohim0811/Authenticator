@@ -10,15 +10,6 @@ class RegisterSchema(BaseModel):
     full_name: str
     phone_number: str
     password: str
-
-
-class ResendOTPSchema(BaseModel):
-    phone_number: str
-
-
-class ConfirmOTPSchema(BaseModel):
-    phone_number: str
-    otp_code: str
     device_token: str | None = None
 
 
@@ -26,6 +17,10 @@ class LoginSchema(BaseModel):
     phone_number: str
     password: str
     device_token: str | None = None
+
+
+class RefreshTokenSchema(BaseModel):
+    refresh_token: str
 
 
 class UserOut(BaseModel):
@@ -39,6 +34,7 @@ class UserOut(BaseModel):
 class TokenSchema(BaseModel):
     status: str = "success"
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: UserOut
 

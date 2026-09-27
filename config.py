@@ -18,14 +18,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_DAYS: int = 30
-
-    # --- Upstash Redis (used to store short-lived OTP codes) ---
-    UPSTASH_URL: str
-    UPSTASH_TOKEN: str
-    OTP_TTL_SECONDS: int = 180
-
-    # --- Telegram bot used for OTP delivery ---
-    BOT_USERNAME: str = "SizningBotiningizName_bot"
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 60
 
     # --- Misc ---
     CORS_ORIGINS: str = "*"  # comma-separated list, or "*" for all
