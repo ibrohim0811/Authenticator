@@ -2,6 +2,7 @@ import os
 import uuid
 import secrets
 import shutil
+import tempfile
 from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -16,6 +17,11 @@ router = APIRouter(prefix="/services", tags=["Services"])
 
 # Fayllar saqlanadigan papka
 UPLOAD_DIR = "uploads"
+if os.environ.get("VERCEL"):
+    UPLOAD_DIR = tempfile.gettempdir()  # Vercel'da bu '/tmp' bo'ladi
+else:
+    UPLOAD_DIR = "uploads"  # Local kompyuteringiz uchun
+
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
