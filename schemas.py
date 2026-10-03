@@ -1,8 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
-
+from pydantic import BaseModel, ConfigDict, HttpUrl, Field, field_validator
 
 # ---------- Users / Auth ----------
 
@@ -41,11 +40,21 @@ class TokenSchema(BaseModel):
 
 # ---------- Services ----------
 
-class RegisterServiceSchema(BaseModel):
-    name: str        # short identifier, e.g. "jamgarma_app"
-    title: str       # full organization name
+class ServiceResponseSchema(BaseModel):
+    id: uuid.UUID
+    name: str
+    title: str
     logo_url: str | None = None
     about: str | None = None
+    token: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RegisterServiceResponse(BaseModel):
+    status: str
+    service_id: str
+    token: str
 
 
 class SendMessageSchema(BaseModel):
@@ -53,7 +62,6 @@ class SendMessageSchema(BaseModel):
     token: str
     user_phone: str
     message: str
-
 
 # ---------- Notifications ----------
 

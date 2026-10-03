@@ -71,7 +71,15 @@ async def login_user(payload: LoginSchema, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.phone_number == payload.phone_number))
     user = result.scalar_one_or_none()
 
-    if not user or not verify_password(payload.password, user.hashed_password):
+    # 1. Agar foydalanuvchi bazada umumiy yo'q bo'lsa -> 404
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bunday telefon raqam avval ro'yxatdan o'tmagan!"
+        )
+
+    # 2. Parol noto'g'ri bo'lsa -> 401
+    if not verify_password(payload.password, user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Telefon raqam yoki parol noto'g'ri!",
@@ -81,8 +89,6 @@ async def login_user(payload: LoginSchema, db: AsyncSession = Depends(get_db)):
         user.device_token = payload.device_token
 
     return await _issue_tokens(user, db)
-
-
 # 3. REFRESH — exchange a still-valid refresh token for a brand-new access
 #    + refresh pair (rotation: the old refresh token is immediately invalid).
 @router.post("/refresh", response_model=TokenSchema)
@@ -121,6 +127,19 @@ async def refresh_tokens(payload: RefreshTokenSchema, db: AsyncSession = Depends
 
     return await _issue_tokens(user, db)
 
+@router.post("/logout", status_code=status.HTTP_200_OK)
+async def logout(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Foydalanuvchini tizimdan chiqaradi va DB'dagi refresh token hashini tozalaydi.
+    """
+    current_user.refresh_token_hash = None
+    db.add(current_user)
+    await db.commit()
+    
+    return {"detail": "Tizimdan muvaffaqiyatli chiqildi"}
 
 # 4. ME — who am I (useful for the client to verify a stored token)
 @router.get("/me", response_model=UserOut)

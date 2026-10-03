@@ -4,9 +4,13 @@ from datetime import datetime, timezone
 from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
-
+from sqlalchemy import Enum as SQLEnum
+from enum import Enum
 from database import Base
 
+class UserRole(str, Enum):
+    OWNER = "owner"
+    USER = "user"
 
 class Service(Base):
     """External services allowed to push notifications (e.g. a savings app, an e-commerce app)."""
@@ -38,7 +42,11 @@ class User(Base):
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     device_token: Mapped[str | None] = mapped_column(Text, nullable=True)
-
+    role: Mapped[UserRole] = mapped_column(
+            SQLEnum(UserRole), 
+            default=UserRole.USER, 
+            nullable=False
+        )    
     # SHA-256 hash of the current valid refresh token (never the raw token).
     # Overwritten every time a new refresh/access pair is issued (register,
     # login, refresh), which gives simple one-shot rotation: an old refresh
