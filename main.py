@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,7 +17,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.mount("/static", StaticFiles(directory="uploads"), name="static")
+if os.environ.get("VERCEL"):
+    UPLOAD_DIR = tempfile.gettempdir() # /tmp
+else:
+    UPLOAD_DIR = "uploads"
+
+# 2. Papka yo'q bo'lsa yaratamiz
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# 3. StaticFiles ni dynamic papka yo'li bilan ulash
+app.mount("/static", StaticFiles(directory=UPLOAD_DIR), name="static")
 app.include_router(auth.router)
 app.include_router(service.router)
 app.include_router(notifications.router)
