@@ -18,6 +18,9 @@ engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DEBUG,
     poolclass=NullPool,
+    connect_args={
+        "prepare_threshold": None,  # Yoki 0 qo'yishingiz ham mumkin
+    },
 )
 
 AsyncSessionLocal = async_sessionmaker(
