@@ -19,8 +19,6 @@ engine = create_async_engine(
     echo=settings.DEBUG,
     poolclass=NullPool,
     connect_args={
-        # Required when talking to PgBouncer in transaction mode.
-        "prepared_statement_cache_size": 0,
         "statement_cache_size": 0,
     },
 )
