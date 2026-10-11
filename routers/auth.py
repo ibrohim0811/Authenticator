@@ -87,7 +87,7 @@ async def login_user(payload: LoginSchema, db: AsyncSession = Depends(get_db)):
 
     if payload.device_token:
         user.device_token = payload.device_token
-        await db.commit()          # <-- Mana bu yerda bazaga saqlanadi
+        await db.commit()
         await db.refresh(user)
 
     return await _issue_tokens(user, db)
