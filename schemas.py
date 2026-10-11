@@ -73,3 +73,9 @@ class NotificationOut(BaseModel):
     message: str
     is_read: bool
     sent_at: datetime
+
+
+
+class BroadcastSchema(BaseModel):
+  title: str = Field(..., max_length=150, description="Xabar sarlavhasi")
+  message: str = Field(..., max_length=1000, description="Xabar matni")

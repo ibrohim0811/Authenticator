@@ -1,17 +1,20 @@
 import os
 import uuid
+import asyncio
 import secrets
 import shutil
 import tempfile
-from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File
+from fastapi import APIRouter, Depends, HTTPException, status, Form, UploadFile, File, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
 # O'zingizning modellaringiz va bog'liqliklaringizni import qiling:
 from models import Service, User, UserRole, Notification
 from deps import get_db, get_current_user
-from schemas import RegisterServiceResponse, SendMessageSchema
+from schemas import RegisterServiceResponse, SendMessageSchema, BroadcastSchema
 from services.fcm import send_fcm_notification
+from firebase_admin import messaging
+from services.background import process_broadcast, process_mass_push
 
 router = APIRouter(prefix="/services", tags=["Services"])
 
@@ -23,6 +26,35 @@ else:
     UPLOAD_DIR = "uploads"  # Local kompyuteringiz uchun
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+
+@router.post("/broadcast")
+async def send_broadcast_message(
+    payload: BroadcastSchema,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user)
+):
+    # 1. Huquqni tekshirish
+    if current_user.role not in [UserRole.ADMIN, UserRole.OWNER]:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ommaviy xabar yuborish uchun faqat Admin yoki Owner huquqi kerak."
+        )
+
+    # 2. Og'ir ishni (barcha userlarga xabar tarqatishni) fon rejimiga topshiramiz
+    background_tasks.add_task(
+        process_mass_push, 
+        title=payload.title, 
+        message=payload.message
+    )
+
+    # 3. Foydalanuvchiga darhol javob qaytaramiz (u kutib qolmaydi)
+    return {
+        "status": "success",
+        "message": "Ommaviy xabar fonda yuborish uchun navbatga qo'shildi."
+    }
+
 
 
 @router.post("/register", response_model=RegisterServiceResponse, status_code=status.HTTP_201_CREATED)
@@ -93,6 +125,8 @@ async def register_service(
         "service_id": str(new_service.id),
         "token": new_service.token
     }
+
+
 
 @router.post("/messages/send")
 async def send_message(payload: SendMessageSchema, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
