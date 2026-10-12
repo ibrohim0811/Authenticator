@@ -28,6 +28,7 @@ class UserOut(BaseModel):
     id: uuid.UUID
     full_name: str
     phone_number: str
+    role: str
 
 
 class TokenSchema(BaseModel):
@@ -62,6 +63,18 @@ class SendMessageSchema(BaseModel):
     token: str
     user_phone: str
     message: str
+
+
+class GetServicesSchema(BaseModel):
+    id: uuid.UUID
+    name: str
+    title: str
+    logo_url: str | None = None
+    about: str | None = None
+    token: str
+
+    model_config = ConfigDict(from_attributes=True)
+    
 
 # ---------- Notifications ----------
 

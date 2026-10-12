@@ -11,9 +11,10 @@ from sqlalchemy.future import select
 # O'zingizning modellaringiz va bog'liqliklaringizni import qiling:
 from models import Service, User, UserRole, Notification
 from deps import get_db, get_current_user
-from schemas import RegisterServiceResponse, SendMessageSchema, BroadcastSchema
+from schemas import RegisterServiceResponse, SendMessageSchema, BroadcastSchema, GetServicesSchema
 from services.fcm import send_fcm_notification
 from firebase_admin import messaging
+from typing import List
 from services.background import process_broadcast, process_mass_push
 
 router = APIRouter(prefix="/services", tags=["Services"])
@@ -170,3 +171,18 @@ async def send_message(payload: SendMessageSchema, db: AsyncSession = Depends(ge
         "message": "Xabar yetkazildi",
         "push_sent": fcm_sent
     }
+
+
+@router.get("/get", response_model=List[GetServicesSchema])
+async def getServices(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    if user.role != UserRole.OWNER:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Ushbu amalni bajarishda sizda yetarlicha huquq yo'q!")
+
+    result = await db.scalars(select(Service))
+    services = result.all()
+    
+    if not services:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Sizda hali Servicelar mavjud emas")
+
+    return services
+
