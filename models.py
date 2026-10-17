@@ -88,5 +88,5 @@ class Notification(Base):
     )
 
     # Bog'lanishlar
-    user = relationship("User", back_populates="notifications")
-    service = relationship("Service", back_populates="notifications")
+    user = relationship("User", back_populates="notifications", passive_deletes=True)
+    service = relationship("Service", back_populates="notifications", passive_deletes=True)
