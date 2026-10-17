@@ -128,27 +128,44 @@ async def register_service(
     }
 
 
-@router.post("/delete")
-async def delete_service(service_token: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+@router.delete("/delete")
+async def delete_service(
+    service_token: str, 
+    db: AsyncSession = Depends(get_db), 
+    user: User = Depends(get_current_user)
+):
+    # 1. Rolni tekshirish (Faqat USER bo'lmaganlar kira oladi)
+    if user.role == UserRole.USER:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Huquqingiz yetarli emas !"
+        )
+
+    # 2. Servisni bazadan qidirish
     result = await db.execute(select(Service).where(Service.token == service_token))
     service = result.scalar_one_or_none()
     
+    if not service:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, 
+            detail="Bunday tokenli service topilmadi!"
+        )
 
-    if user.role == UserRole.USER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Huquqingiz yetarli emas !")
-
-    if user.role != UserRole.ADMIN or user.role != UserRole.OWNER and service.user_id != user.id:
+    # 3. Egaligini yoki Admin ekanligini tekshirish
+    # Agar user ADMIN bo'lmasa VA service uning o'nikiga tegishli bo'lmasa -> xato beramiz
+    if user.role != UserRole.ADMIN and service.user_id != user.id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN, 
             detail="Service sizga tegishli emas!"
         )
 
+    # 4. O'chirish
     await db.delete(service)
     await db.commit()
 
     return {
         "message": "Service muvaffaqiyatli o'chirildi !", 
-        "status": status.HTTP_204_NO_CONTENT
+        "status": status.HTTP_200_OK  # 204 o'rniga 200 (chunki JSON body qaytaryapsiz)
     }
 
     
