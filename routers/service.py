@@ -128,7 +128,31 @@ async def register_service(
     }
 
 
+@router.post("/delete")
+async def delete_service(service_token: str, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    result = await db.execute(select(Service).where(Service.token == service_token))
+    service = result.scalar_one_or_none()
+    
 
+    if user.role == UserRole.USER:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Huquqingiz yetarli emas !")
+
+    if user.role != UserRole.ADMIN or user.role != UserRole.OWNER and service.user_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Service sizga tegishli emas!"
+        )
+
+    await db.delete(service)
+    await db.commit()
+
+    return {
+        "message": "Service muvaffaqiyatli o'chirildi !", 
+        "status": status.HTTP_204_NO_CONTENT
+    }
+
+    
+    
 @router.post("/messages/send")
 async def send_message(payload: SendMessageSchema, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
     if user.role != UserRole.OWNER and user.role != UserRole.OWNER.value:

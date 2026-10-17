@@ -86,7 +86,7 @@ class NotificationOut(BaseModel):
     message: str
     is_read: bool
     sent_at: datetime
-
+    
 
 
 class BroadcastSchema(BaseModel):

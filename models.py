@@ -8,29 +8,11 @@ from sqlalchemy import Enum as SQLEnum
 from enum import Enum
 from database import Base
 
+
 class UserRole(str, Enum):
     OWNER = "owner"
+    ADMIN = "admin"
     USER = "user"
-
-class Service(Base):
-    """External services allowed to push notifications (e.g. a savings app, an e-commerce app)."""
-
-    __tablename__ = "services"
-
-    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    about: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    token: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-
-    notifications = relationship("Notification", back_populates="service")
 
 
 class User(Base):
@@ -43,21 +25,48 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     device_token: Mapped[str | None] = mapped_column(Text, nullable=True)
     role: Mapped[UserRole] = mapped_column(
-            SQLEnum(UserRole), 
-            default=UserRole.USER, 
-            nullable=False
-        )    
-    # SHA-256 hash of the current valid refresh token (never the raw token).
-    # Overwritten every time a new refresh/access pair is issued (register,
-    # login, refresh), which gives simple one-shot rotation: an old refresh
-    # token stops working the moment a newer one is issued.
+        SQLEnum(UserRole), 
+        default=UserRole.USER, 
+        nullable=False
+    )    
     refresh_token_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
+    # Bog'lanishlar
+    services = relationship("Service", back_populates="owner", cascade="all, delete-orphan")
     notifications = relationship("Notification", back_populates="user", cascade="all, delete-orphan")
+
+
+class Service(Base):
+    """External services allowed to push notifications (e.g. a savings app, an e-commerce app)."""
+
+    __tablename__ = "services"
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    
+    # Qaysi tadbirkorga (owner/admin) tegishliligi
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+
+    name: Mapped[str] = mapped_column(String(100), unique=True, nullable=False)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    logo_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    about: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    token: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+    # Bog'lanishlar
+    owner = relationship("User", back_populates="services")
+    notifications = relationship("Notification", back_populates="service", cascade="all, delete-orphan")
 
 
 class Notification(Base):
@@ -68,7 +77,7 @@ class Notification(Base):
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
     service_id: Mapped[uuid.UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("services.id", ondelete="RESTRICT"), nullable=False
+        UUID(as_uuid=True), ForeignKey("services.id", ondelete="CASCADE"), nullable=False
     )
 
     message: Mapped[str] = mapped_column(Text, nullable=False)
@@ -78,5 +87,6 @@ class Notification(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
 
+    # Bog'lanishlar
     user = relationship("User", back_populates="notifications")
     service = relationship("Service", back_populates="notifications")
