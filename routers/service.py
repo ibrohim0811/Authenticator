@@ -64,6 +64,7 @@ async def register_service(
     title: str = Form(..., min_length=2, max_length=150),
     about: str | None = Form(None),
     logo: UploadFile | None = File(None),  # PC'dan rasm yuklash uchun
+    logo_url_input: str | None = Form(None, alias="logo_url"), # Rasm URL manzili uchun
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user)
 ):
@@ -83,8 +84,9 @@ async def register_service(
             detail="Bunday nomli servis allaqachon ro'yxatdan o'tgan."
         )
 
-    # 3. Agar rasm yuborilgan bo'lsa, uni local diskka saqlaymiz
-    logo_url = None
+    # 3. Rasmni aniqlash (Fayl yoki URL orqali)
+    final_logo_url = None
+
     if logo and logo.filename:
         # Fayl kengaytmasini aniqlash (.png, .jpg va h.k.)
         file_ext = os.path.splitext(logo.filename)[1].lower()
@@ -102,19 +104,24 @@ async def register_service(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(logo.file, buffer)
 
-        # Bazaga saqlanadigan nisbiy havola (Static files orqali ko'rish uchun)
-        logo_url = f"/static/{unique_filename}"
+        # Bazaga saqlanadigan nisbiy havola
+        final_logo_url = f"/static/{unique_filename}"
+        
+    elif logo_url_input:
+        # Agar fayl yuklanmagan bo'lsa-yu, URL yuborilgan bo'lsa
+        final_logo_url = logo_url_input
 
     # 4. Servis tokenini generatsiya qilish
     generated_token = f"srv_token_{secrets.token_hex(24)}"
 
-    # 5. Yangi servis obyektini yaratish
+    # 5. Yangi servis obyektini yaratish (user_id ni ham qo'shib unutmang!)
     new_service = Service(
         name=name,
         title=title,
         about=about,
-        logo_url=logo_url,
+        logo_url=final_logo_url,
         token=generated_token,
+        user_id=user.id,  # Oldingi xatolik takrorlanmasligi uchun qo'shildi
     )
 
     db.add(new_service)
