@@ -1,4 +1,5 @@
 import logging
+import asyncio
 import firebase_admin
 from firebase_admin import messaging
 
@@ -39,7 +40,7 @@ async def send_fcm_notification(device_token: str, title: str, body: str) -> boo
         )
         
         # messaging.send sinxron ishlagani uchun bloklab qo'ymasligi uchun uni to_thread da ishlatish ham tavsiya qilinadi
-        response = messaging.send(message)
+        response = await asyncio.to_thread(messaging.send, message)
         logger.info(f"FCM xabari muvaffaqiyatli yuborildi. ID: {response}")
         return True
 

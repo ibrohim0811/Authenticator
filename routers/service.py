@@ -186,8 +186,16 @@ async def send_message(payload: SendMessageSchema, db: AsyncSession = Depends(ge
     if getattr(user, "device_token", None):
         fcm_sent = await send_fcm_notification(
             device_token=user.device_token,
-            title=service.title if hasattr(service, "title") else service.name,
+            title=service.title,
             body=payload.message,
+            # Mobil ilova uchun qo'shimcha ma'lumotlar (Data payload)
+            extra_data={
+                "service_id": str(service.id),
+                "service_name": service.name,
+                "service_title": service.title,
+                "logo_url": service.logo_url or "",
+                "about": service.about or "",
+            }
         )
 
     return {
