@@ -10,14 +10,26 @@ if not firebase_admin._apps:
     firebase_admin.initialize_app()
 
 
-async def send_fcm_notification(device_token: str, title: str, body: str) -> bool:
+async def send_fcm_notification(
+    device_token: str, 
+    title: str, 
+    body: str, 
+    extra_data: dict = None
+) -> bool:
     """FCM orqali mobil qurilmaga darhol keladigan yuqori prioritetli push notification yuboradi."""
     try:
+        # data qiymatlari faqat string (matn) bo'lishi kerak, shuning uchun barchasini str ga o'tkazib olamiz
+        formatted_data = {}
+        if extra_data:
+            formatted_data = {str(k): str(v) for k, v in extra_data.items() if v is not None}
+
         message = messaging.Message(
             notification=messaging.Notification(
                 title=title,
                 body=body,
             ),
+            # Qo'shimcha ma'lumotlarni shu yerga qo'shamiz
+            data=formatted_data,
             token=device_token,
             # Android uchun telefonni darhol uyg'otuvchi yuqori prioritet
             android=messaging.AndroidConfig(
@@ -39,11 +51,9 @@ async def send_fcm_notification(device_token: str, title: str, body: str) -> boo
             ),
         )
         
-        # messaging.send sinxron ishlagani uchun bloklab qo'ymasligi uchun uni to_thread da ishlatish ham tavsiya qilinadi
         response = await asyncio.to_thread(messaging.send, message)
         logger.info(f"FCM xabari muvaffaqiyatli yuborildi. ID: {response}")
         return True
-
     except Exception as e:
-        logger.error(f"FCM xabar yuborishda xatolik yuz berdi: {e}")
+        logger.error(f"FCM xabarini yuborishda xatolik: {e}")
         return False
