@@ -9,6 +9,25 @@ from routers import service
 from routers import auth
 from routers import notifications
 
+import json
+import os
+import firebase_admin
+from firebase_admin import credentials
+
+if not firebase_admin._apps:
+    # Vercel muhit o'zgaruvchisidan JSON matnni olamiz
+    firebase_config_str = os.getenv("FIREBASE_CONFIG_JSON")
+    
+    if firebase_config_str:
+        # Agar Vercel'da bo'lsa, matnni JSON dictionary ga o'tkazib ulaymiz
+        cred_dict = json.loads(firebase_config_str)
+        cred = credentials.Certificate(cred_dict)
+        firebase_admin.initialize_app(cred)
+    else:
+        # Agar lokal kompyuterda ishlatayotgan bo'lsangiz, oddiy fayldan o'qiydi
+        cred = credentials.Certificate("first-public-login-1dfc7d602759.json")
+        firebase_admin.initialize_app(cred)
+
 app = FastAPI(title="Authenticator by iDev")
 
 app.add_middleware(
