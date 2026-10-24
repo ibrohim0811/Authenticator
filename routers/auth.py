@@ -2,13 +2,14 @@ import uuid
 
 import jwt
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database import get_db
 from deps import get_current_user
 from models import User
 from schemas import (
+    DeviceTokenSchema,
     LoginSchema,
     RefreshTokenSchema,
     RegisterSchema,
@@ -25,6 +26,21 @@ from security import (
 )
 
 router = APIRouter(prefix="/api/v1/users", tags=["auth"])
+
+
+async def _claim_device_token(user: User, token: str, db: AsyncSession) -> None:
+    """Bu FCM token'ni faqat shu userga biriktiradi.
+
+    Agar xuddi shu token boshqa userlarda bo'lsa (masalan, bitta telefonda
+    boshqa odam login qilgan), ulardan olib tashlanadi — aks holda xabar
+    noto'g'ri odamga ketib qolishi mumkin. Commit qilmaydi.
+    """
+    await db.execute(
+        update(User)
+        .where(User.device_token == token, User.id != user.id)
+        .values(device_token=None)
+    )
+    user.device_token = token
 
 
 async def _issue_tokens(user: User, db: AsyncSession) -> TokenSchema:
@@ -56,9 +72,12 @@ async def register_user(payload: RegisterSchema, db: AsyncSession = Depends(get_
         full_name=payload.full_name,
         phone_number=payload.phone_number,
         hashed_password=hash_password(payload.password),
-        device_token=payload.device_token,
     )
     db.add(new_user)
+    await db.flush()  # new_user.id kerak
+
+    if payload.device_token:
+        await _claim_device_token(new_user, payload.device_token, db)
     await db.commit()
     await db.refresh(new_user)
 
@@ -86,11 +105,25 @@ async def login_user(payload: LoginSchema, db: AsyncSession = Depends(get_db)):
         )
 
     if payload.device_token:
-        user.device_token = payload.device_token
+        await _claim_device_token(user, payload.device_token, db)
         await db.commit()
         await db.refresh(user)
 
     return await _issue_tokens(user, db)
+
+
+# 2.1 DEVICE TOKEN — FCM token yangilanganda (onNewToken) ilova shuni chaqiradi
+@router.patch("/device-token", status_code=status.HTTP_200_OK)
+async def update_device_token(
+    payload: DeviceTokenSchema,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await _claim_device_token(current_user, payload.device_token, db)
+    await db.commit()
+    return {"status": "success", "detail": "Device token yangilandi"}
+
+
 # 3. REFRESH — exchange a still-valid refresh token for a brand-new access
 #    + refresh pair (rotation: the old refresh token is immediately invalid).
 @router.post("/refresh", response_model=TokenSchema)
@@ -138,6 +171,7 @@ async def logout(
     Foydalanuvchini tizimdan chiqaradi va DB'dagi refresh token hashini tozalaydi.
     """
     current_user.refresh_token_hash = None
+    current_user.device_token = None  # chiqib ketgan user'ga push kelmasin
     db.add(current_user)
     await db.commit()
     

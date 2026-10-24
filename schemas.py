@@ -18,6 +18,10 @@ class LoginSchema(BaseModel):
     device_token: str | None = None
 
 
+class DeviceTokenSchema(BaseModel):
+    device_token: str = Field(min_length=10)
+
+
 class RefreshTokenSchema(BaseModel):
     refresh_token: str
 
