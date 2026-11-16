@@ -16,6 +16,7 @@ from services.fcm import send_fcm_notification
 from firebase_admin import messaging
 from typing import List
 from services.background import process_broadcast, process_mass_push
+from services.ws_manager import manager
 
 router = APIRouter(prefix="/services", tags=["Services"])
 
@@ -178,13 +179,18 @@ async def delete_service(
     
     
 @router.post("/messages/send")
-async def send_message(payload: SendMessageSchema, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+async def send_message(
+    payload: SendMessageSchema,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
     if user.role != UserRole.OWNER and user.role != UserRole.OWNER.value:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Ushbu amalni bajarish uchun sizda yetarli huquq yo'q."
-            )
-    # 1. Servis va token tekshiruvi (is_active uchun # noqa siz to'g'ri SQLAlchemy 2.0 usuli)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Ushbu amalni bajarish uchun sizda yetarli huquq yo'q."
+        )
+
+    # 1. Servis va token tekshiruvi
     query_service = select(Service).where(
         Service.id == payload.service_id,
         Service.token == payload.token,
@@ -194,38 +200,57 @@ async def send_message(payload: SendMessageSchema, db: AsyncSession = Depends(ge
     if not service:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Yaroqsiz service_id yoki token!")
 
-    # 2. Foydalanuvchini izlash
+    # 2. Foydalanuvchini izlash (qabul qiluvchi)
     query_user = select(User).where(User.phone_number == payload.user_phone)
-    user = (await db.execute(query_user)).scalar_one_or_none()
-    if not user:
+    target_user = (await db.execute(query_user)).scalar_one_or_none()
+    if not target_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ushbu telefon raqamli foydalanuvchi topilmadi")
 
-    # 3. Bildirishnomani bazaga saqlash
-    notification = Notification(user_id=user.id, service_id=service.id, message=payload.message)
+    # 3. Bildirishnomani bazaga saqlash (FAQAT BIR MARTA)
+    notification = Notification(
+        user_id=target_user.id,
+        service_id=service.id,
+        message=payload.message,
+    )
     db.add(notification)
     await db.commit()
+    await db.refresh(notification)
 
     # 4. FCM Push-notification yuborish
     fcm_sent = False
-    if getattr(user, "device_token", None):
-        fcm_sent = await send_fcm_notification(
-            device_token=user.device_token,
+    fcm_error = None
+    if getattr(target_user, "device_token", None):
+        fcm_sent, fcm_error = await send_fcm_notification(
+            device_token=target_user.device_token,
             title=service.title,
             body=payload.message,
-            # Mobil ilova uchun qo'shimcha ma'lumotlar (Data payload)
             extra_data={
                 "service_id": str(service.id),
                 "service_name": service.name,
                 "service_title": service.title,
                 "logo_url": service.logo_url or "",
                 "about": service.about or "",
-            }
+            },
         )
+
+    # 5. WebSocket orqali real vaqtda yuborish
+    ws_sent = await manager.send_to_user(target_user.id, {
+        "type": "notification",
+        "id": str(notification.id),
+        "service_id": str(service.id),
+        "service_title": service.title,
+        "logo_url": service.logo_url or "",
+        "message": notification.message,
+        "is_read": False,
+        "sent_at": notification.sent_at.isoformat(),
+    })
 
     return {
         "status": "success",
         "message": "Xabar yetkazildi",
-        "push_sent": fcm_sent
+        "push_sent": fcm_sent,
+        "push_error": fcm_error,
+        "ws_sent": ws_sent > 0,
     }
 
 

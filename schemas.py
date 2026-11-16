@@ -96,3 +96,7 @@ class NotificationOut(BaseModel):
 class BroadcastSchema(BaseModel):
   title: str = Field(..., max_length=150, description="Xabar sarlavhasi")
   message: str = Field(..., max_length=1000, description="Xabar matni")
+
+
+class DeviceTokenCreate(BaseModel):
+    token: str = Field(..., description="Firebase FCM tokeni")

@@ -19,7 +19,7 @@ if not firebase_admin._apps:
 
 # 2) Endi routerlarni import qilamiz
 from config import settings  # noqa: E402
-from routers import service, auth, notifications  # noqa: E402
+from routers import service, auth, notifications, ws  # noqa: E402
 
 app = FastAPI(title="Authenticator by iDev")
 
@@ -42,6 +42,7 @@ app.mount("/static", StaticFiles(directory=UPLOAD_DIR), name="static")
 app.include_router(auth.router)
 app.include_router(service.router)
 app.include_router(notifications.router)
+app.include_router(ws.router)
 
 
 @app.get("/")

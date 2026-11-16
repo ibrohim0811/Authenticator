@@ -15,6 +15,7 @@ from schemas import (
     RegisterSchema,
     TokenSchema,
     UserOut,
+    DeviceTokenCreate
 )
 from security import (
     create_access_token,
