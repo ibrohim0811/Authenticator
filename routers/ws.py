@@ -33,7 +33,8 @@ async def _get_user_id(token: str) -> uuid.UUID | None:
 async def notifications_ws(websocket: WebSocket, token: str = Query(...)):
     user_id = await _get_user_id(token)
     if user_id is None:
-        await websocket.close(code=1008)  # policy violation
+        await websocket.accept()
+        await websocket.close(code=1008)
         return
 
     await manager.connect(user_id, websocket)

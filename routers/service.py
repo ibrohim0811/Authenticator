@@ -251,6 +251,8 @@ async def send_message(
         "push_sent": fcm_sent,
         "push_error": fcm_error,
         "ws_sent": ws_sent > 0,
+        "service_name": service.name,
+        "about": service.about or "",
     }
 
 
