@@ -15,7 +15,7 @@ from schemas import RegisterServiceResponse, SendMessageSchema, BroadcastSchema,
 from services.fcm import send_fcm_notification
 from firebase_admin import messaging
 from typing import List
-from services.background import process_broadcast, process_mass_push
+from services.background import process_mass_push
 from services.ws_manager import manager
 
 router = APIRouter(prefix="/services", tags=["Services"])
